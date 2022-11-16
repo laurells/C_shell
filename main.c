@@ -1,63 +1,44 @@
 #include "shell.h"
 
 /**
- * sig_handler - handles ^C signal interupt
- * @sig_handler: signal handler variable
+ * main - entry point
+ * @ac: arg count
+ * @av: arg vector
  *
- * Return: void
+ * Return: 0 on success, 1 on error
  */
-
-void sig_handler(int sig_handler)
+int main(int ac, char **av)
 {
-	(void) sig_handler;
-	_puts("\n$ ");
-}
+	info_t info[] = { INFO_INIT };
+	int fd = 2;
 
-/**
- * main - main function for the shell
- * @argc: number of arguments passed to main
- * @argv: array of arguments passed to main
- * @environment: array of environment variables
- *
- * Return: 0 or exit status, or ?
- */
-int main(int argc, char **argv, char **environment)
-{
-	size_t buffer = 0;
-	unsigned int interactive = 0, i;
-	input_t inputs = {NULL, NULL, NULL, 0, NULL, 0, NULL};
+	asm ("mov %1, %0\n\t"
+		"add $3, %0"
+		: "=r" (fd)
+		: "r" (fd));
 
-	UNUSED(argc);
-
-	inputs.argv = argv;
-	inputs.env = init_env(environment);
-	signal(SIGINT, sig_handler);
-	if (!isatty(STDIN_FILENO))
-		interactive = 1;
-	if (interactive == 0)
-		_puts("$ ");
-
-	while (getline(&(inputs.buffer), &buffer, stdin) != -1)
+	if (ac == 2)
 	{
-		inputs.count++;
-		inputs.commands = tokenize(inputs.buffer, ";");
-		for (i = 0; inputs.commands && inputs.commands[i] != NULL; i++)
+		fd = open(av[1], O_RDONLY);
+		if (fd == -1)
 		{
-			inputs.tokens = tokenize(inputs.commands[i], "\n \t\r");
-			if (inputs.tokens && inputs.tokens[0])
-				if (_builtins(&inputs) == NULL)
-					check_path(&inputs);
-			free(inputs.tokens);
+			if (errno == EACCES)
+				exit(126);
+			if (errno == ENOENT)
+			{
+				_eputs(av[0]);
+				_eputs(": 0: Can't open ");
+				_eputs(av[1]);
+				_eputchar('\n');
+				_eputchar(BUF_FLUSH);
+				exit(127);
+			}
+			return (EXIT_FAILURE);
 		}
-		free(inputs.buffer);
-		free(inputs.commands);
-		if (interactive == 0)
-			_puts("$ ");
-		inputs.buffer = NULL;
+		info->readfd = fd;
 	}
-	if (interactive == 0)
-		_puts("\n");
-	free_environ(inputs.env);
-	free(inputs.buffer);
-	exit(inputs.status);
+	populate_env_list(info);
+	read_history(info);
+	hsh(info, av);
+	return (EXIT_SUCCESS);
 }
